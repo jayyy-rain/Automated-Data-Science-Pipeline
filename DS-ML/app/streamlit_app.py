@@ -1,3 +1,5 @@
+#python -m streamlit run app/streamlit_app.py
+
 import streamlit as st
 import pandas as pd
 import tempfile
@@ -6,55 +8,48 @@ import os
 from src.pipeline.auto_pipeline import run_pipeline
 
 st.set_page_config(page_title="Auto DS Pipeline", layout="wide")
+st.title("Automated Data Science Pipeline")
 
-st.title("🧠 Automated Data Science Pipeline")
-st.write("Upload a CSV file and automatically generate EDA, preprocessing, and ML-ready data.")
-
-# ---- File upload ----
 uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
 
-if uploaded_file is not None:
-    # Save uploaded file temporarily
+if uploaded_file:
     with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp:
         tmp.write(uploaded_file.getvalue())
         csv_path = tmp.name
 
-    st.success("CSV uploaded successfully")
+    df_preview = pd.read_csv(csv_path)
+
+    st.subheader("Target Selection")
+    target_column = st.selectbox(
+        "Select target column (optional)",
+        ["None"] + list(df_preview.columns)
+    )
+
+    if target_column == "None":
+        target_column = None
 
     if st.button("Run Pipeline"):
-        with st.spinner("Running data pipeline..."):
-            run_pipeline(csv_path)
+        run_pipeline(csv_path, target_column)
 
-        st.success("Pipeline completed successfully")
+        st.subheader("Processed Dataset")
+        st.dataframe(pd.read_csv("data/processed/processed_data.csv").head())
 
-        # ---- Show processed data ----
-        processed_path = "data/processed/processed_data.csv"
+        st.subheader("Feature Importance")
+        if os.path.exists("reports/feature_importance.csv"):
+            st.dataframe(pd.read_csv("reports/feature_importance.csv").head(10))
+        else:
+            st.info("Feature importance not available (no target selected).")
 
-        if os.path.exists(processed_path):
-            df_processed = pd.read_csv(processed_path)
+        st.subheader("EDA Visualizations")
+        if os.path.exists("reports/figures"):
+            cols = st.columns(2)
+            images = os.listdir("reports/figures")
+            for i, img in enumerate(images):
+                cols[i % 2].image(
+                    os.path.join("reports/figures", img),
+                    width=350
+                )
 
-            st.subheader("📦 Processed Dataset Preview")
-            st.dataframe(df_processed.head())
-
-            st.download_button(
-                label="⬇️ Download Processed CSV",
-                data=df_processed.to_csv(index=False),
-                file_name="processed_data.csv",
-                mime="text/csv"
-            )
-
-        # ---- Show EDA images ----
-        st.subheader("📊 EDA Visualizations")
-        figures_dir = "reports/figures"
-
-        if os.path.exists(figures_dir):
-            images = sorted(os.listdir(figures_dir))
-            for img in images:
-                st.image(os.path.join(figures_dir, img), caption=img, use_container_width=True)
-
-        # ---- Show report ----
-        report_path = "reports/auto_report.md"
-        if os.path.exists(report_path):
-            st.subheader("📝 Auto-generated Report")
-            with open(report_path, "r", encoding="utf-8") as f:
-                st.markdown(f.read())
+        st.subheader("Auto-generated Report")
+        with open("reports/auto_report.md", encoding="utf-8") as f:
+            st.markdown(f.read())
